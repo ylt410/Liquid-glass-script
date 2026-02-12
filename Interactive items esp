@@ -1,0 +1,222 @@
+-- ======================================================
+-- Gemini Object Visual iOS 26 (全功能修复版)
+-- 特性：精准绘制 + 物理果冻 + 最小化功能
+-- ======================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local localPlayer = Players.LocalPlayer
+
+-- --- 物品透视设置 ---
+local OBJ_SETTINGS = {
+    Enabled = true,
+    ShowName = true,
+    ShowDist = true,
+    Minimized = false
+}
+
+-- ==========================================
+-- 1. UI 架构 (回归你最爱的那个版本)
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "Gemini_Obj_Final"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "Main"
+mainFrame.Size = UDim2.new(0, 230, 0, 180)
+mainFrame.Position = UDim2.new(0.5, -115, 0.6, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 12, 10)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true 
+mainFrame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner", mainFrame)
+uiCorner.CornerRadius = UDim.new(0, 24)
+
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.fromRGB(255, 180, 0) 
+stroke.Transparency = 0.6
+stroke.Thickness = 1.2
+
+local titleBar = Instance.new("TextLabel")
+titleBar.Size = UDim2.new(1, 0, 0, 50)
+titleBar.BackgroundTransparency = 1
+titleBar.Text = "OBJECT RADAR"
+titleBar.TextColor3 = Color3.fromRGB(255, 180, 0)
+titleBar.Font = Enum.Font.GothamBold
+titleBar.TextSize = 16
+titleBar.Parent = mainFrame
+
+-- 【补回】最小化按钮
+local miniBtn = Instance.new("TextButton")
+miniBtn.Size = UDim2.new(0, 28, 0, 28)
+miniBtn.Position = UDim2.new(1, -38, 0, 11)
+miniBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+miniBtn.BackgroundTransparency = 0.9
+miniBtn.Text = "−"
+miniBtn.TextColor3 = Color3.new(1, 1, 1)
+miniBtn.Parent = mainFrame
+Instance.new("UICorner", miniBtn).CornerRadius = UDim.new(1, 0)
+
+local contentFrame = Instance.new("Frame")
+contentFrame.Size = UDim2.new(1, 0, 1, -60)
+contentFrame.Position = UDim2.new(0, 0, 0, 55)
+contentFrame.BackgroundTransparency = 1
+contentFrame.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout", contentFrame)
+layout.Padding = UDim.new(0, 6)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- --- 按钮工厂 ---
+local function createToggle(text, settingKey)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.88, 0, 0, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundTransparency = 0.94
+    btn.Text = "  " .. text
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextSize = 13
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Parent = contentFrame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+
+    local indicator = Instance.new("Frame", btn)
+    indicator.Size = UDim2.new(0, 32, 0, 18)
+    indicator.Position = UDim2.new(1, -40, 0.5, -9)
+    indicator.BackgroundColor3 = OBJ_SETTINGS[settingKey] and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(90, 90, 90)
+    Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
+    
+    local dot = Instance.new("Frame", indicator)
+    dot.Size = UDim2.new(0, 14, 0, 14)
+    dot.Position = OBJ_SETTINGS[settingKey] and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    dot.BackgroundColor3 = Color3.new(1, 1, 1)
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+
+    btn.MouseButton1Click:Connect(function()
+        OBJ_SETTINGS[settingKey] = not OBJ_SETTINGS[settingKey]
+        TweenService:Create(indicator, TweenInfo.new(0.3), {BackgroundColor3 = OBJ_SETTINGS[settingKey] and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(90, 90, 90)}):Play()
+        dot:TweenPosition(OBJ_SETTINGS[settingKey] and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7), "Out", "Back", 0.3, true)
+    end)
+end
+
+createToggle("感应开启", "Enabled")
+createToggle("显示名称", "ShowName")
+createToggle("距离显示", "ShowDist")
+
+-- ==========================================
+-- 2. 拖拽逻辑 (带最小化状态锁定的果冻缩放)
+-- ==========================================
+local isDragging = false
+local dragStart, startPos
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+
+        local baseHeight = OBJ_SETTINGS.Minimized and 50 or 180
+        TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 245, 0, baseHeight + 15),
+            BackgroundTransparency = 0.35
+        }):Play()
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isDragging = false
+                local finalHeight = OBJ_SETTINGS.Minimized and 50 or 180
+                TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 230, 0, finalHeight),
+                    BackgroundTransparency = 0.5
+                }):Play()
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- 【补回】最小化点击事件
+miniBtn.MouseButton1Click:Connect(function()
+    OBJ_SETTINGS.Minimized = not OBJ_SETTINGS.Minimized
+    contentFrame.Visible = not OBJ_SETTINGS.Minimized
+    local targetSize = OBJ_SETTINGS.Minimized and UDim2.new(0, 230, 0, 50) or UDim2.new(0, 230, 0, 180)
+    TweenService:Create(mainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Elastic), {Size = targetSize}):Play()
+    miniBtn.Text = OBJ_SETTINGS.Minimized and "+" or "−"
+end)
+
+-- ==========================================
+-- 3. 绘制逻辑 (精准绑定渲染)
+-- ==========================================
+local function addESP(obj)
+    local adornee = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+    if not adornee or obj:FindFirstChild("Gemini_ESP") then return end
+
+    local high = Instance.new("Highlight", obj)
+    high.Name = "Gemini_High"
+    high.FillColor = Color3.fromRGB(255, 180, 0)
+    high.FillTransparency = 0.6
+
+    local bgui = Instance.new("BillboardGui", obj)
+    bgui.Name = "Gemini_ESP"
+    bgui.Adornee = adornee
+    bgui.AlwaysOnTop = true
+    bgui.Size = UDim2.new(0, 150, 0, 40)
+    bgui.ExtentsOffset = Vector3.new(0, 2, 0)
+
+    local label = Instance.new("TextLabel", bgui)
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 200, 50)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 13
+    label.RichText = true
+
+    RunService.RenderStepped:Connect(function()
+        if not obj or not obj.Parent then return end
+        if OBJ_SETTINGS.Enabled then
+            high.Enabled = true
+            bgui.Enabled = true
+            local text = ""
+            if OBJ_SETTINGS.ShowName then text = text .. "✨ " .. obj.Name .. "\n" end
+            if OBJ_SETTINGS.ShowDist and localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = math.floor((adornee.Position - localPlayer.Character.HumanoidRootPart.Position).Magnitude)
+                text = text .. "<font size='10' color='#ffffff'>" .. dist .. "m</font>"
+            end
+            label.Text = text
+        else
+            high.Enabled = false
+            bgui.Enabled = false
+        end
+    end)
+end
+
+-- 扫描交互物
+local function scan()
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ClickDetector") or v:IsA("ProximityPrompt") then
+            addESP(v.Parent)
+        end
+    end
+end
+
+scan()
+workspace.DescendantAdded:Connect(function(v)
+    if v:IsA("ClickDetector") or v:IsA("ProximityPrompt") then
+        task.wait(0.5)
+        addESP(v.Parent)
+    end
+end)
