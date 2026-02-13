@@ -1,0 +1,243 @@
+-- ======================================================
+-- Gemini Super Ring V5 (全功能重制版)
+-- 功能：开启/关闭、半径调节 (< >)、最小化、果冻拖拽
+-- ======================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+-- --- 核心配置 ---
+local SETTINGS = {
+    Enabled = false,
+    Radius = 50,
+    Height = 100,
+    RotationSpeed = 0.5,
+    AttractionStrength = 1000,
+    MaxHeight = 190,   -- 展开高度
+    MinHeight = 45,    -- 最小化高度
+    Width = 220,
+    IsMinimized = false
+}
+
+-- --- Network Claim (核心) ---
+if not getgenv().Network then
+    getgenv().Network = {BaseParts = {}, Velocity = Vector3.new(14.46, 14.46, 14.46)}
+    Network.RetainPart = function(Part)
+        if typeof(Part) == "Instance" and Part:IsA("BasePart") then
+            table.insert(Network.BaseParts, Part)
+            Part.CustomPhysicalProperties = PhysicalProperties.new(0, 0, 0, 0, 0)
+            Part.CanCollide = false
+        end
+    end
+    RunService.Heartbeat:Connect(function()
+        pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end)
+        for _, Part in pairs(Network.BaseParts) do
+            if Part:IsDescendantOf(workspace) then Part.Velocity = Network.Velocity end
+        end
+    end)
+end
+
+-- ==========================================
+-- 1. UI 界面构建
+-- ==========================================
+local screenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+screenGui.Name = "Gemini_Ring_Final_V2"
+screenGui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Name = "Main"
+mainFrame.Size = UDim2.new(0, SETTINGS.Width, 0, SETTINGS.MaxHeight)
+mainFrame.Position = UDim2.new(0.5, -110, 0.4, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.ClipsDescendants = true
+
+local uiCorner = Instance.new("UICorner", mainFrame)
+uiCorner.CornerRadius = UDim.new(0, 22)
+
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.new(1, 1, 1)
+stroke.Transparency = 0.8
+stroke.Thickness = 1.2
+
+-- 标题
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 45)
+title.Text = "SUPER RING V5"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.BackgroundTransparency = 1
+
+-- 最小化按钮
+local miniBtn = Instance.new("TextButton", mainFrame)
+miniBtn.Size = UDim2.new(0, 24, 0, 24)
+miniBtn.Position = UDim2.new(1, -35, 0, 10)
+miniBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+miniBtn.BackgroundTransparency = 0.8
+miniBtn.Text = "−"
+miniBtn.TextColor3 = Color3.new(1, 1, 1)
+miniBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", miniBtn).CornerRadius = UDim.new(1, 0)
+
+-- 内容容器
+local container = Instance.new("Frame", mainFrame)
+container.Size = UDim2.new(1, 0, 1, -50)
+container.Position = UDim2.new(0, 0, 0, 50)
+container.BackgroundTransparency = 1
+
+local layout = Instance.new("UIListLayout", container)
+layout.Padding = UDim.new(0, 10)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- 开关按钮
+local toggleBtn = Instance.new("TextButton", container)
+toggleBtn.Size = UDim2.new(0.85, 0, 0, 40)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+toggleBtn.BackgroundTransparency = 0.7
+toggleBtn.Text = "黑洞: 关闭"
+toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 13
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 12)
+
+-- 【这里是你要的半径控制组】
+local radiusFrame = Instance.new("Frame", container)
+radiusFrame.Size = UDim2.new(0.85, 0, 0, 40)
+radiusFrame.BackgroundTransparency = 1
+
+local decBtn = Instance.new("TextButton", radiusFrame)
+decBtn.Size = UDim2.new(0.25, 0, 1, 0)
+decBtn.Text = "<"
+decBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+decBtn.BackgroundTransparency = 0.9
+decBtn.TextColor3 = Color3.new(1, 1, 1)
+decBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", decBtn).CornerRadius = UDim.new(0, 10)
+
+local incBtn = Instance.new("TextButton", radiusFrame)
+incBtn.Size = UDim2.new(0.25, 0, 1, 0)
+incBtn.Position = UDim2.new(0.75, 0, 0, 0)
+incBtn.Text = ">"
+incBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+incBtn.BackgroundTransparency = 0.9
+incBtn.TextColor3 = Color3.new(1, 1, 1)
+incBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", incBtn).CornerRadius = UDim.new(0, 10)
+
+local radiusDisp = Instance.new("TextLabel", radiusFrame)
+radiusDisp.Size = UDim2.new(0.45, 0, 1, 0)
+radiusDisp.Position = UDim2.new(0.275, 0, 0, 0)
+radiusDisp.Text = "半径: " .. SETTINGS.Radius
+radiusDisp.TextColor3 = Color3.new(1, 1, 1)
+radiusDisp.BackgroundTransparency = 1
+radiusDisp.Font = Enum.Font.GothamMedium
+radiusDisp.TextSize = 13
+
+-- ==========================================
+-- 2. 交互逻辑 (最小化 + 果冻拖拽)
+-- ==========================================
+
+-- 最小化功能
+miniBtn.MouseButton1Click:Connect(function()
+    SETTINGS.IsMinimized = not SETTINGS.IsMinimized
+    local targetHeight = SETTINGS.IsMinimized and SETTINGS.MinHeight or SETTINGS.MaxHeight
+    miniBtn.Text = SETTINGS.IsMinimized and "+" or "−"
+    
+    TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic), {
+        Size = UDim2.new(0, SETTINGS.Width, 0, targetHeight)
+    }):Play()
+    container.Visible = not SETTINGS.IsMinimized
+end)
+
+-- 果冻拖拽 (确保无限次生效)
+local dragging = false
+local dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        
+        local currentHeight = SETTINGS.IsMinimized and SETTINGS.MinHeight or SETTINGS.MaxHeight
+        TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Elastic), {
+            Size = UDim2.new(0, SETTINGS.Width + 15, 0, currentHeight + 10)
+        }):Play()
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+        local targetHeight = SETTINGS.IsMinimized and SETTINGS.MinHeight or SETTINGS.MaxHeight
+        TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic), {
+            Size = UDim2.new(0, SETTINGS.Width, 0, targetHeight)
+        }):Play()
+    end
+end)
+
+-- ==========================================
+-- 3. 黑洞控制逻辑
+-- ==========================================
+toggleBtn.MouseButton1Click:Connect(function()
+    SETTINGS.Enabled = not SETTINGS.Enabled
+    toggleBtn.Text = SETTINGS.Enabled and "黑洞: 开启" or "黑洞: 关闭"
+    TweenService:Create(toggleBtn, TweenInfo.new(0.3), {
+        BackgroundColor3 = SETTINGS.Enabled and Color3.fromRGB(50, 210, 110) or Color3.fromRGB(255, 50, 50)
+    }):Play()
+end)
+
+decBtn.MouseButton1Click:Connect(function()
+    SETTINGS.Radius = math.max(0, SETTINGS.Radius - 5)
+    radiusDisp.Text = "半径: " .. SETTINGS.Radius
+end)
+
+incBtn.MouseButton1Click:Connect(function()
+    SETTINGS.Radius = math.min(500, SETTINGS.Radius + 5)
+    radiusDisp.Text = "半径: " .. SETTINGS.Radius
+end)
+
+-- 零件环绕物理引擎
+local parts = {}
+local function addPart(p)
+    if p:IsA("BasePart") and not p.Anchored and not p:IsDescendantOf(LocalPlayer.Character) then
+        p.CanCollide = false
+        table.insert(parts, p)
+    end
+end
+workspace.DescendantAdded:Connect(addPart)
+for _,v in pairs(workspace:GetDescendants()) do addPart(v) end
+
+RunService.Heartbeat:Connect(function()
+    if not SETTINGS.Enabled then return end
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        for i, part in pairs(parts) do
+            if part.Parent and not part.Anchored then
+                local pos = part.Position
+                local dist = (Vector3.new(pos.X, hrp.Position.Y, pos.Z) - hrp.Position).Magnitude
+                local angle = math.atan2(pos.Z - hrp.Position.Z, pos.X - hrp.Position.X) + math.rad(SETTINGS.RotationSpeed)
+                local target = Vector3.new(
+                    hrp.Position.X + math.cos(angle) * math.min(SETTINGS.Radius, dist),
+                    hrp.Position.Y + (SETTINGS.Height * math.abs(math.sin((pos.Y - hrp.Position.Y)/SETTINGS.Height))),
+                    hrp.Position.Z + math.sin(angle) * math.min(SETTINGS.Radius, dist)
+                )
+                part.Velocity = (target - part.Position).unit * SETTINGS.AttractionStrength
+            else
+                table.remove(parts, i)
+            end
+        end
+    end
+end)
