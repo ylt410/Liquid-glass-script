@@ -1,0 +1,130 @@
+-- ======================================================
+-- Gemini Noclip Mini (无抽搐增强版)
+-- 修复：彻底解决关闭后走路抖动/抽搐的 Bug
+-- ======================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+
+local CONFIG = {
+    Height = 80, 
+    Width = 130,
+    Enabled = false
+}
+
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "Gemini_Noclip_AntiStutter"
+screenGui.ResetOnSpawn = false
+
+-- 【主框架】
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, CONFIG.Width, 0, CONFIG.Height)
+mainFrame.Position = UDim2.new(0.05, 0, 0.05, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.ClipsDescendants = true
+
+local uiCorner = Instance.new("UICorner", mainFrame)
+uiCorner.CornerRadius = UDim.new(0, 20)
+
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.new(1, 1, 1)
+stroke.Transparency = 0.8
+stroke.Thickness = 1.2
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 35)
+title.BackgroundTransparency = 1
+title.Text = "穿墙" 
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+
+local btn = Instance.new("TextButton", mainFrame)
+btn.Size = UDim2.new(0.8, 0, 0, 32)
+btn.Position = UDim2.new(0.1, 0, 0.48, 0)
+btn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+btn.BackgroundTransparency = 0.7
+btn.Text = "开启"
+btn.TextColor3 = Color3.new(1, 1, 1)
+btn.Font = Enum.Font.GothamBold
+btn.TextSize = 12
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
+
+-- ==========================================
+-- 1. 果冻拖拽逻辑 (确保存在)
+-- ==========================================
+local dragging, dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic), {Size = UDim2.new(0, CONFIG.Width + 15, 0, CONFIG.Height + 10)}):Play()
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+        TweenService:Create(mainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Elastic), {Size = UDim2.new(0, CONFIG.Width, 0, CONFIG.Height)}):Play()
+    end
+end)
+
+-- ==========================================
+-- 2. 核心：无抽搐穿墙引擎
+-- ==========================================
+local noclipConn = nil
+
+local function setCollision(status)
+    local char = player.Character
+    if not char then return end
+    for _, v in pairs(char:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = status
+        end
+    end
+end
+
+local function toggle()
+    CONFIG.Enabled = not CONFIG.Enabled
+    
+    if CONFIG.Enabled then
+        -- 开启
+        btn.Text = "关闭"
+        TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(50, 210, 110)}):Play()
+        
+        -- 使用 Heartbeat 代替 Stepped，有时更稳定
+        noclipConn = RunService.Stepped:Connect(function()
+            if CONFIG.Enabled then
+                setCollision(false)
+            end
+        end)
+    else
+        -- 关闭
+        if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+        btn.Text = "开启"
+        TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(255, 50, 50)}):Play()
+        
+        -- 【关键修复】：强制重置碰撞并刷新物理状态
+        task.spawn(function()
+            for i = 1, 5 do -- 连续刷新几帧，确保物理引擎听话
+                setCollision(true)
+                RunService.Heartbeat:Wait()
+            end
+        end)
+    end
+end
+
+btn.MouseButton1Click:Connect(toggle)
+UserInputService.InputBegan:Connect(function(i, g) if not g and i.KeyCode == Enum.KeyCode.X then toggle() end end)
