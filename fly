@@ -26,7 +26,7 @@ main.Parent = localPlayer:WaitForChild("PlayerGui")
 
 local Frame = Instance.new("Frame")
 Frame.Name = "MainFrame"
-Frame.Size = UDim2.new(0, 190, 0, 160) -- 保持你原版的紧凑方形感
+Frame.Size = UDim2.new(0, 190, 0, 195) -- 保持你原版的紧凑方形感
 Frame.Position = UDim2.new(0.1, 0, 0.4, 0)
 Frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 Frame.BackgroundTransparency = 0.5
@@ -123,12 +123,12 @@ Frame.InputBegan:Connect(function(input)
         isDragging = true
         dragStart = input.Position
         startPos = Frame.Position
-        local targetH = isMinimized and 45 or 160
+        local targetH = isMinimized and 45 or 195
         TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Elastic), {Size = UDim2.new(0, 200, 0, targetH + 10)}):Play()
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 isDragging = false
-                local finalH = isMinimized and 45 or 160
+                local finalH = isMinimized and 45 or 195
                 TweenService:Create(Frame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic), {Size = UDim2.new(0, 190, 0, finalH)}):Play()
             end
         end)
@@ -146,7 +146,7 @@ miniBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     content.Visible = not isMinimized
     authorText.Visible = not isMinimized
-    local targetH = isMinimized and 45 or 160
+    local targetH = isMinimized and 45 or 195
     TweenService:Create(Frame, TweenInfo.new(0.6, Enum.EasingStyle.Elastic), {Size = UDim2.new(0, 190, 0, targetH)}):Play()
     miniBtn.Text = isMinimized and "+" or "−"
 end)
