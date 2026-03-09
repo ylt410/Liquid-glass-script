@@ -1,16 +1,19 @@
 -- ======================================================
--- Gemini ESP iOS 26 (修复：最小化拖动尺寸异常)
+-- Gemini ESP iOS 26 (稳定版：移除天线 + UI瘦身 + 强力队伍过滤)
 -- ======================================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local Camera = workspace.CurrentCamera
 local localPlayer = Players.LocalPlayer
 
 -- --- 全局状态 ---
 local ESP_SETTINGS = {
-    Enabled = true,
+    HighlightEnabled = true,
+    BoxEnabled = true,
+    TeamCheck = true,        -- 默认开启强力队伍检测
     ShowName = true,
     ShowHealth = true,
     ShowDist = true,
@@ -18,7 +21,7 @@ local ESP_SETTINGS = {
 }
 
 -- ==========================================
--- 1. UI 架构 (iOS 26 液态玻璃风格)
+-- 1. UI 架构 (瘦身至 290)
 -- ==========================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Gemini_Final_ESP"
@@ -28,7 +31,7 @@ screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "Main"
-mainFrame.Size = UDim2.new(0, 230, 0, 220)
+mainFrame.Size = UDim2.new(0, 230, 0, 290) -- 高度缩小至 290
 mainFrame.Position = UDim2.new(0.5, -115, 0.4, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 mainFrame.BackgroundTransparency = 0.5
@@ -70,13 +73,12 @@ contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
 local layout = Instance.new("UIListLayout", contentFrame)
-layout.Padding = UDim.new(0, 6)
+layout.Padding = UDim.new(0, 5)
 layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- --- 按钮工厂 ---
 local function createToggle(text, settingKey)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.88, 0, 0, 36)
+    btn.Size = UDim2.new(0.88, 0, 0, 32) -- 按钮稍微调瘦
     btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     btn.BackgroundTransparency = 0.94
     btn.Text = "  " .. text
@@ -85,35 +87,38 @@ local function createToggle(text, settingKey)
     btn.TextSize = 13
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.Parent = contentFrame
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
 
     local indicator = Instance.new("Frame", btn)
-    indicator.Size = UDim2.new(0, 32, 0, 18)
-    indicator.Position = UDim2.new(1, -40, 0.5, -9)
+    indicator.Size = UDim2.new(0, 30, 0, 16)
+    indicator.Position = UDim2.new(1, -38, 0.5, -8)
     indicator.BackgroundColor3 = ESP_SETTINGS[settingKey] and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(90, 90, 90)
     Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
     
     local dot = Instance.new("Frame", indicator)
-    dot.Size = UDim2.new(0, 14, 0, 14)
-    dot.Position = ESP_SETTINGS[settingKey] and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+    dot.Size = UDim2.new(0, 12, 0, 12)
+    dot.Position = ESP_SETTINGS[settingKey] and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6)
     dot.BackgroundColor3 = Color3.new(1, 1, 1)
     Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
     btn.MouseButton1Click:Connect(function()
         ESP_SETTINGS[settingKey] = not ESP_SETTINGS[settingKey]
         TweenService:Create(indicator, TweenInfo.new(0.3), {BackgroundColor3 = ESP_SETTINGS[settingKey] and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(90, 90, 90)}):Play()
-        dot:TweenPosition(ESP_SETTINGS[settingKey] and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7), "Out", "Back", 0.3, true)
+        dot:TweenPosition(ESP_SETTINGS[settingKey] and UDim2.new(1, -14, 0.5, -6) or UDim2.new(0, 2, 0.5, -6), "Out", "Back", 0.3, true)
     end)
     return btn
 end
 
-createToggle("核心系统", "Enabled")
+-- --- 菜单项 (顺序微调) ---
+createToggle("高亮透视", "HighlightEnabled")
+createToggle("人物方框", "BoxEnabled")
+createToggle("队伍检测", "TeamCheck")
 createToggle("名字透视", "ShowName")
 createToggle("距离显示", "ShowDist")
 createToggle("血量条目", "ShowHealth")
 
 -- ==========================================
--- 2. 修复后的稳定拖拽逻辑 (带状态锁定的果冻缩放)
+-- 2. 果冻缩放拖拽逻辑 (适配 290 高度)
 -- ==========================================
 local isDragging = false
 local dragStart, startPos
@@ -124,10 +129,8 @@ mainFrame.InputBegan:Connect(function(input)
         dragStart = input.Position
         startPos = mainFrame.Position
 
-        -- 根据当前状态决定放大比例
         local baseWidth = 230
-        local baseHeight = ESP_SETTINGS.Minimized and 50 or 220
-        
+        local baseHeight = ESP_SETTINGS.Minimized and 50 or 290
         TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
             Size = UDim2.new(0, baseWidth + 15, 0, baseHeight + 15),
             BackgroundTransparency = 0.35
@@ -136,8 +139,7 @@ mainFrame.InputBegan:Connect(function(input)
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 isDragging = false
-                -- 核心修复：根据 Minimized 状态决定回弹尺寸
-                local finalHeight = ESP_SETTINGS.Minimized and 50 or 220
+                local finalHeight = ESP_SETTINGS.Minimized and 50 or 290
                 TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
                     Size = UDim2.new(0, 230, 0, finalHeight),
                     BackgroundTransparency = 0.5
@@ -157,59 +159,118 @@ end)
 miniBtn.MouseButton1Click:Connect(function()
     ESP_SETTINGS.Minimized = not ESP_SETTINGS.Minimized
     contentFrame.Visible = not ESP_SETTINGS.Minimized
-    local targetSize = ESP_SETTINGS.Minimized and UDim2.new(0, 230, 0, 50) or UDim2.new(0, 230, 0, 220)
+    local targetSize = ESP_SETTINGS.Minimized and UDim2.new(0, 230, 0, 50) or UDim2.new(0, 230, 0, 290)
     TweenService:Create(mainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Elastic), {Size = targetSize}):Play()
     miniBtn.Text = ESP_SETTINGS.Minimized and "+" or "−"
 end)
 
 -- ==========================================
--- 3. 渲染引擎 (保持原样)
+-- 3. 渲染引擎 (强力队伍过滤核心逻辑)
 -- ==========================================
+
+local function ClearAllESP()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "Gemini_Highlight" or obj.Name == "Gemini_Info" or obj.Name == "Gemini_2DBox" then
+            obj:Destroy()
+        end
+    end
+end
+
+-- 后台切回自动唤醒逻辑
+UserInputService.WindowFocused:Connect(function()
+    task.wait(0.5)
+    ClearAllESP()
+end)
+
 local function updateESP()
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= localPlayer then
+        if p ~= localPlayer and p.Character then
             local char = p.Character
-            if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("Head") then
-                local high = char:FindFirstChild("Gemini_Highlight") or Instance.new("Highlight", char)
-                high.Name = "Gemini_Highlight"
-                local bgui = char:FindFirstChild("Gemini_Info") or Instance.new("BillboardGui", char)
-                bgui.Name = "Gemini_Info"
-                local label = bgui:FindFirstChild("Label") or Instance.new("TextLabel", bgui)
-                label.Name = "Label"
+            local hum = char:FindFirstChild("Humanoid")
+            local head = char:FindFirstChild("Head")
+            local root = char:FindFirstChild("HumanoidRootPart")
+            
+            if hum and root and head and hum.Health > 0 then
+                local isTeammate = (p.Team == localPlayer.Team)
+                local teamColor = p.TeamColor.Color
+                
+                -- --- 队伍过滤：队友屏蔽除了高亮外的所有透视 ---
+                local isFiltered = ESP_SETTINGS.TeamCheck and isTeammate
 
-                if ESP_SETTINGS.Enabled then
+                -- A. 高亮 (队友保留，同步队伍颜色)
+                local high = char:FindFirstChild("Gemini_Highlight")
+                if ESP_SETTINGS.HighlightEnabled then
+                    if not high then
+                        high = Instance.new("Highlight", char)
+                        high.Name = "Gemini_Highlight"
+                    end
                     high.Enabled = true
-                    high.FillColor = p.TeamColor.Color
-                    high.FillTransparency = 0.5
+                    high.FillColor = teamColor
                     high.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    bgui.AlwaysOnTop = true
-                    bgui.Size = UDim2.new(0, 200, 0, 50)
-                    bgui.Adornee = char.Head
-                    bgui.ExtentsOffset = Vector3.new(0, 3, 0)
-                    label.Size = UDim2.new(1, 0, 1, 0)
-                    label.BackgroundTransparency = 1
-                    label.TextColor3 = Color3.new(1, 1, 1)
-                    label.TextStrokeTransparency = 0.5
-                    label.RichText = true
-                    label.Font = Enum.Font.GothamMedium
+                elseif high then
+                    high:Destroy()
+                end
 
+                -- B. 2D方框 (队友消失，透明度0纯描边)
+                local boxGui = char:FindFirstChild("Gemini_2DBox")
+                if ESP_SETTINGS.BoxEnabled and not isFiltered then
+                    if not boxGui then
+                        boxGui = Instance.new("BillboardGui", char)
+                        boxGui.Name = "Gemini_2DBox"
+                        boxGui.AlwaysOnTop = true
+                        boxGui.Size = UDim2.new(4.5, 0, 6, 0) -- R15 比例
+                        boxGui.Adornee = root
+                        local f = Instance.new("Frame", boxGui)
+                        f.Size = UDim2.new(1, 0, 1, 0)
+                        f.BackgroundTransparency = 1
+                        local s = Instance.new("UIStroke", f)
+                        s.Thickness = 1.5
+                        s.Transparency = 0
+                    end
+                    boxGui.Enabled = true
+                    boxGui.Frame.UIStroke.Color = teamColor -- 描边变色
+                elseif boxGui then
+                    boxGui:Destroy()
+                end
+
+                -- C. 文字信息 (队友消失，富文本始终置顶)
+                local infoGui = char:FindFirstChild("Gemini_Info")
+                if (ESP_SETTINGS.ShowName or ESP_SETTINGS.ShowHealth or ESP_SETTINGS.ShowDist) and not isFiltered then
+                    if not infoGui then
+                        infoGui = Instance.new("BillboardGui", char)
+                        infoGui.Name = "Gemini_Info"
+                        infoGui.AlwaysOnTop = true
+                        infoGui.Size = UDim2.new(0, 200, 0, 50)
+                        infoGui.Adornee = head
+                        infoGui.ExtentsOffset = Vector3.new(0, 3.5, 0)
+                        local l = Instance.new("TextLabel", infoGui)
+                        l.Name = "Label"
+                        l.BackgroundTransparency = 1
+                        l.TextColor3 = Color3.new(1, 1, 1)
+                        l.TextStrokeTransparency = 0.5
+                        l.RichText = true
+                        l.Font = Enum.Font.GothamMedium
+                        l.Size = UDim2.new(1, 0, 1, 0)
+                    end
+                    infoGui.Enabled = true
+                    
                     local text = ""
                     if ESP_SETTINGS.ShowName then text = text .. "<b>" .. p.DisplayName .. "</b>\n" end
+                    
+                    local stats = ""
                     if ESP_SETTINGS.ShowHealth then 
-                        local hp = math.floor(char.Humanoid.Health)
-                        local color = hp > 50 and "#55ff55" or "#ff5555"
-                        text = text .. "<font color='" .. color .. "'>HP: " .. hp .. "</font> " 
+                        local hp = math.floor(hum.Health)
+                        local hpColor = (hp > 50 and "#55ff55" or "#ff5555")
+                        stats = stats .. "<font color='" .. hpColor .. "'>HP: " .. hp .. "</font> " 
                     end
                     if ESP_SETTINGS.ShowDist then
-                        local dist = (localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")) 
-                            and math.floor((localPlayer.Character.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude) or 0
-                        text = text .. " | <font color='#ffffff'>" .. dist .. "m</font>"
+                        -- 使用 Camera 位置计算距离，在 iOS 上更稳
+                        local dist = math.floor((Camera.CFrame.Position - root.Position).Magnitude)
+                        stats = stats .. (stats ~= "" and " | " or "") .. "<font color='#ffffff'>" .. dist .. "m</font>"
                     end
-                    label.Text = text
-                    label.Visible = true
-                else
-                    high.Enabled = false
-                    label.Visible = false
+                    infoGui.Label.Text = text .. stats
+                elseif infoGui then
+                    infoGui:Destroy()
                 end
             end
         end
