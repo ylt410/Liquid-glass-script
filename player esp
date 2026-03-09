@@ -50,7 +50,7 @@ stroke.Thickness = 1.2
 local titleBar = Instance.new("TextLabel")
 titleBar.Size = UDim2.new(1, 0, 0, 50)
 titleBar.BackgroundTransparency = 1
-titleBar.Text = "Gemini Visual"
+titleBar.Text = "夜透视"
 titleBar.TextColor3 = Color3.new(1, 1, 1)
 titleBar.Font = Enum.Font.GothamBold
 titleBar.TextSize = 16
@@ -110,7 +110,7 @@ local function createToggle(text, settingKey)
 end
 
 -- --- 菜单项 (顺序微调) ---
-createToggle("高亮透视", "HighlightEnabled")
+createToggle("内透(如果消失重开开关)", "HighlightEnabled")
 createToggle("人物方框", "BoxEnabled")
 createToggle("队伍检测", "TeamCheck")
 createToggle("名字透视", "ShowName")
