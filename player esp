@@ -190,7 +190,7 @@ local function updateESP()
             local head = char:FindFirstChild("Head")
             local root = char:FindFirstChild("HumanoidRootPart")
             
-            if hum and root and head and hum.Health > 0 then
+            if hum and root and head and hum.Health > -1000 then
                 local isTeammate = (p.Team == localPlayer.Team)
                 local teamColor = p.TeamColor.Color
                 
