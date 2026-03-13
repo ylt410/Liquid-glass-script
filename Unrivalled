@@ -1,0 +1,202 @@
+-- ======================================================
+-- Gemini Godmode Mini
+-- UI作者 Gemini
+-- 功能改为 无敌
+-- ======================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+local CONFIG = {
+    Height = 80,
+    Width = 130,
+    Enabled = false
+}
+
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "Gemini_Godmode"
+screenGui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, CONFIG.Width, 0, CONFIG.Height)
+mainFrame.Position = UDim2.new(0.05, 0, 0.05, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.ClipsDescendants = true
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0,20)
+
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.new(1,1,1)
+stroke.Transparency = 0.8
+stroke.Thickness = 1.2
+
+-- 标题
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1,0,0,35)
+title.Position = UDim2.new(0,0,0,2)
+title.BackgroundTransparency = 1
+title.Text = "无敌"
+title.TextColor3 = Color3.new(1,1,1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.TextTransparency = 0.2
+
+-- 按钮
+local btn = Instance.new("TextButton", mainFrame)
+btn.Size = UDim2.new(0.8,0,0,32)
+btn.Position = UDim2.new(0.1,0,0.48,0)
+btn.BackgroundColor3 = Color3.fromRGB(255,50,50)
+btn.BackgroundTransparency = 0.7
+btn.Text = "开启"
+btn.TextColor3 = Color3.new(1,1,1)
+btn.Font = Enum.Font.GothamBold
+btn.TextSize = 12
+Instance.new("UICorner",btn).CornerRadius = UDim.new(0,10)
+
+-- ==========================================
+-- 果冻拖拽
+-- ==========================================
+local function setupGelly()
+    local dragging = false
+    local dragStart,startPos
+
+    mainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+
+            TweenService:Create(mainFrame,TweenInfo.new(0.5,Enum.EasingStyle.Elastic,Enum.EasingDirection.Out),{
+                Size = UDim2.new(0,CONFIG.Width+15,0,CONFIG.Height+10),
+                BackgroundTransparency = 0.4
+            }):Play()
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+            TweenService:Create(mainFrame,TweenInfo.new(0.6,Enum.EasingStyle.Elastic,Enum.EasingDirection.Out),{
+                Size = UDim2.new(0,CONFIG.Width,0,CONFIG.Height),
+                BackgroundTransparency = 0.5
+            }):Play()
+        end
+    end)
+end
+setupGelly()
+
+-- ==========================================
+-- 无敌核心
+-- ==========================================
+
+local function generateActionNumber()
+    return "Action"..math.random(1000,9999)
+end
+
+local function godmodeLoop()
+
+    local char = player.Character
+    if not char then return end
+
+    local data = player:FindFirstChild("Data")
+    if not data then return end
+
+    local charValue = data.Character.Value
+    local ability = ReplicatedStorage.Characters[charValue].WallCombo
+
+    local actionNumber = generateActionNumber()
+    local randomId = math.random(100000,999999)
+
+    local args = {
+        ability,
+        "Characters:"..charValue..":WallCombo",
+        1,
+        randomId,
+        {
+            HitboxCFrames = {nil},
+            BestHitCharacter = char,
+            HitCharacters = {char},
+            Ignore = {[actionNumber] = {char}},
+            DeathInfo = {},
+            Actions = {[actionNumber] = {}},
+            HitInfo = {Blocked=false,IsFacing=true,IsInFront=true},
+            BlockedCharacters = {},
+            ServerTime = tick(),
+            FromCFrame = nil
+        },
+        actionNumber
+    }
+
+    pcall(function()
+        ReplicatedStorage.Remotes.Abilities.Ability:FireServer(ability,randomId)
+    end)
+
+    pcall(function()
+        ReplicatedStorage.Remotes.Combat.Action:FireServer(unpack(args))
+    end)
+end
+
+local godConn=nil
+
+-- ==========================================
+-- 开关
+-- ==========================================
+local function toggle()
+
+    CONFIG.Enabled = not CONFIG.Enabled
+
+    if CONFIG.Enabled then
+
+        btn.Text="关闭"
+
+        TweenService:Create(btn,TweenInfo.new(0.3),{
+            BackgroundColor3 = Color3.fromRGB(50,210,110)
+        }):Play()
+
+        godConn = RunService.Heartbeat:Connect(function()
+            godmodeLoop()
+        end)
+
+    else
+
+        if godConn then
+            godConn:Disconnect()
+            godConn=nil
+        end
+
+        btn.Text="开启"
+
+        TweenService:Create(btn,TweenInfo.new(0.3),{
+            BackgroundColor3 = Color3.fromRGB(255,50,50)
+        }):Play()
+
+    end
+end
+
+btn.MouseButton1Click:Connect(toggle)
+
+UserInputService.InputBegan:Connect(function(i,g)
+    if not g and i.KeyCode == Enum.KeyCode.X then
+        toggle()
+    end
+end)
