@@ -122,12 +122,19 @@ createToggle("血量条目", "ShowHealth")
 -- ==========================================
 local isDragging = false
 local dragStart, startPos
+local activeTouch = nil
 
 mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isDragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
+    if input.UserInputType == Enum.UserInputType.MouseButton1 
+or (input.UserInputType == Enum.UserInputType.Touch and not activeTouch) then
+
+           isDragging = true
+dragStart = input.Position
+startPos = mainFrame.Position
+
+if input.UserInputType == Enum.UserInputType.Touch then
+    activeTouch = input
+end
 
         local baseWidth = 230
         local baseHeight = ESP_SETTINGS.Minimized and 50 or 290
@@ -137,8 +144,16 @@ mainFrame.InputBegan:Connect(function(input)
         }):Play()
 
         input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
+    if input.UserInputState == Enum.UserInputState.End then
+        
+        if input.UserInputType == Enum.UserInputType.Touch then
+            if input == activeTouch then
+                activeTouch = nil
                 isDragging = false
+            end
+        else
+            isDragging = false
+        end
                 local finalHeight = ESP_SETTINGS.Minimized and 50 or 290
                 TweenService:Create(mainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out), {
                     Size = UDim2.new(0, 230, 0, finalHeight),
@@ -150,12 +165,30 @@ mainFrame.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+    if not isDragging then return end
+
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+
+    elseif input.UserInputType == Enum.UserInputType.Touch and input == activeTouch then
+        local delta = input.Position - dragStart
+
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
     end
 end)
-
+       
 miniBtn.MouseButton1Click:Connect(function()
     ESP_SETTINGS.Minimized = not ESP_SETTINGS.Minimized
     contentFrame.Visible = not ESP_SETTINGS.Minimized
