@@ -38,7 +38,6 @@ local function checkBlacklist()
 end
 
 -- ====================== 主循环 ======================
-print("[" .. SCRIPT_NAME .. "] 黑名单监控已启动，每10秒检查一次")
 
 -- 启动时立即检查一次
 task.wait(1)
