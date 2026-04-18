@@ -2,7 +2,7 @@
 -- 夜脚本 - 独立黑名单踢人模块
 -- 每10秒动态检查黑名单
 -- =============================================
-
+local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
