@@ -1,0 +1,55 @@
+-- =============================================
+-- 夜脚本 - 独立黑名单踢人模块
+-- 每10秒动态检查黑名单
+-- =============================================
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- ==================== 配置区 ====================
+local BLACKLIST_URL = "https://pastebin.com/raw/BWPgje4t"   -- ←←← 把你的Pastebin raw链接粘这里
+
+local KICK_REASON = "你已被动态踢黑,信息为:\n你使用脚本影响了夜脚本开发者的游戏"
+-- =============================================
+
+local function checkBlacklist()
+    -- 获取黑名单文本
+    local success, blacklistText = pcall(function()
+        return game:HttpGet(BLACKLIST_URL, true)
+    end)
+
+    if not success or not blacklistText then
+        return false   -- 拉不到就不踢，防止网络波动误伤
+    end
+
+    -- 把玩家名字转小写
+    local myName = string.lower(player.Name)
+
+    -- 逐行检查
+    for line in blacklistText:gmatch("[^\r\n]+") do
+        local trimmed = string.lower(line:match("^%s*(.-)%s*$") or "")
+        if trimmed ~= "" and trimmed == myName then
+            player:Kick(KICK_REASON)
+            return true
+        end
+    end
+
+    return false
+end
+
+-- ====================== 主循环 ======================
+print("[" .. SCRIPT_NAME .. "] 黑名单监控已启动，每10秒检查一次")
+
+-- 启动时立即检查一次
+task.wait(1)
+if checkBlacklist() then
+    return   -- 被踢了就直接结束
+end
+
+-- 每10秒检查一次（动态踢人）
+while true do
+    task.wait(10)
+    if checkBlacklist() then
+        break   -- 踢完就停止循环
+    end
+end
